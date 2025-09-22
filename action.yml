@@ -1,0 +1,89 @@
+name: "APort Assurance Check"
+description: "Check agent assurance levels and compliance"
+author: "APort Team"
+branding:
+  icon: "shield-check"
+  color: "green"
+
+inputs:
+  agent-id:
+    description: "The APort Agent ID to check assurance for."
+    required: true
+  api-base:
+    description: "The base URL for the APort API."
+    required: false
+    default: "https://api.aport.io"
+  min-assurance-level:
+    description: "Minimum required assurance level (1-5)."
+    required: false
+    default: "3"
+  fail-on-low-assurance:
+    description: "Whether the action should fail if assurance level is too low."
+    required: false
+    default: "true"
+
+outputs:
+  assurance_level:
+    description: "The agent assurance level (1-5)."
+    value: ${{ steps.assurance-check.outputs.assurance_level }}
+  assurance_method:
+    description: "The assurance method used."
+    value: ${{ steps.assurance-check.outputs.assurance_method }}
+  verified_at:
+    description: "When the assurance was verified."
+    value: ${{ steps.assurance-check.outputs.verified_at }}
+  compliant:
+    description: "Boolean indicating if the agent meets assurance requirements."
+    value: ${{ steps.assurance-check.outputs.compliant }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check agent assurance
+      id: assurance-check
+      env:
+        APORT_API_BASE: ${{ inputs.api-base }}
+        APORT_AGENT_ID: ${{ inputs.agent-id }}
+        MIN_ASSURANCE_LEVEL: ${{ inputs.min-assurance-level }}
+      run: |
+        echo "🔍 Checking assurance for agent: $APORT_AGENT_ID"
+
+        # Get agent passport
+        RESPONSE=$(curl -s -X GET "$APORT_API_BASE/api/verify/$APORT_AGENT_ID")
+
+        if [ $? -ne 0 ]; then
+          echo "❌ Failed to fetch agent passport"
+          exit 1
+        fi
+
+        # Parse response
+        ASSURANCE_LEVEL=$(echo "$RESPONSE" | jq -r '.assurance_level // 0')
+        ASSURANCE_METHOD=$(echo "$RESPONSE" | jq -r '.assurance_method // "unknown"')
+        VERIFIED_AT=$(echo "$RESPONSE" | jq -r '.assurance_verified_at // "unknown"')
+
+        echo "assurance_level=$ASSURANCE_LEVEL" >> $GITHUB_OUTPUT
+        echo "assurance_method=$ASSURANCE_METHOD" >> $GITHUB_OUTPUT
+        echo "verified_at=$VERIFIED_AT" >> $GITHUB_OUTPUT
+
+        # Check compliance
+        if [ "$ASSURANCE_LEVEL" -ge "$MIN_ASSURANCE_LEVEL" ]; then
+          echo "✅ Agent meets assurance requirements (Level $ASSURANCE_LEVEL >= $MIN_ASSURANCE_LEVEL)"
+          echo "compliant=true" >> $GITHUB_OUTPUT
+        else
+          echo "❌ Agent does not meet assurance requirements (Level $ASSURANCE_LEVEL < $MIN_ASSURANCE_LEVEL)"
+          echo "compliant=false" >> $GITHUB_OUTPUT
+          
+          if [ "${{ inputs.fail-on-low-assurance }}" = "true" ]; then
+            exit 1
+          fi
+        fi
+      shell: bash
+
+    - name: Report results
+      run: |
+        echo "📊 Assurance Check Results:"
+        echo "  Agent ID: ${{ inputs.agent-id }}"
+        echo "  Assurance Level: ${{ steps.assurance-check.outputs.assurance_level }}"
+        echo "  Assurance Method: ${{ steps.assurance-check.outputs.assurance_method }}"
+        echo "  Verified At: ${{ steps.assurance-check.outputs.verified_at }}"
+        echo "  Compliant: ${{ steps.assurance-check.outputs.compliant }}"
