@@ -1,0 +1,56 @@
+# APort Assurance Check Workflow
+# This workflow checks agent assurance levels and compliance
+name: APort Assurance Check
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      agent_id:
+        description: "Agent ID to check"
+        required: true
+        type: string
+      min_level:
+        description: "Minimum assurance level"
+        required: false
+        default: "3"
+        type: string
+
+jobs:
+  assurance-check:
+    runs-on: ubuntu-latest
+    name: Check Agent Assurance
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: APort Assurance Check
+        id: assurance
+        uses: aporthq/assurance-check-action@v1
+        with:
+          agent-id: ${{ github.event.inputs.agent_id || secrets.APORT_AGENT_ID }}
+          min-assurance-level: ${{ github.event.inputs.min_level || '3' }}
+          fail-on-low-assurance: true
+
+      - name: Report Results
+        run: |
+          echo "📊 Assurance Check Results:"
+          echo "  Agent ID: ${{ github.event.inputs.agent_id || secrets.APORT_AGENT_ID }}"
+          echo "  Assurance Level: ${{ steps.assurance.outputs.assurance_level }}"
+          echo "  Assurance Method: ${{ steps.assurance.outputs.assurance_method }}"
+          echo "  Verified At: ${{ steps.assurance.outputs.verified_at }}"
+          echo "  Compliant: ${{ steps.assurance.outputs.compliant }}"
+
+      - name: Deploy if High Assurance
+        if: steps.assurance.outputs.assurance_level >= 4
+        run: |
+          echo "🚀 High assurance level detected - proceeding with deployment"
+          # Add your deployment logic here
+
+      - name: Standard Process if Low Assurance
+        if: steps.assurance.outputs.assurance_level < 4
+        run: |
+          echo "⚠️ Standard assurance level - using standard process"
+          # Add your standard process logic here

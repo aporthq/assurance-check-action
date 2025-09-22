@@ -1,0 +1,13 @@
+# Simple APort Assurance Check
+# Copy this to your .github/workflows/ directory
+
+name: APort Assurance Check
+on: [push]
+
+jobs:
+  assurance-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aporthq/assurance-check-action@v1
+        with:
+          agent-id: ${{ secrets.APORT_AGENT_ID }}
